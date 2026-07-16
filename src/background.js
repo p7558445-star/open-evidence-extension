@@ -84,24 +84,26 @@ function buildHistoryEntry(entry) {
 }
 
 function recordHistory(entry) {
-	chrome.storage.local.get(
-		{
-			[HISTORY_ENABLED_STORAGE_KEY]: DEFAULT_HISTORY_ENABLED,
-			[HISTORY_STORAGE_KEY]: [],
-		},
-		(items) => {
-			if (items[HISTORY_ENABLED_STORAGE_KEY] === false) {
+	chrome.storage.sync.get(
+		{ [HISTORY_ENABLED_STORAGE_KEY]: DEFAULT_HISTORY_ENABLED },
+		(syncItems) => {
+			if (syncItems[HISTORY_ENABLED_STORAGE_KEY] === false) {
 				return;
 			}
 
-			const existing = Array.isArray(items[HISTORY_STORAGE_KEY])
-				? items[HISTORY_STORAGE_KEY]
-				: [];
-			const next = [buildHistoryEntry(entry), ...existing].slice(
-				0,
-				HISTORY_LIMIT,
+			chrome.storage.local.get(
+				{ [HISTORY_STORAGE_KEY]: [] },
+				(items) => {
+					const existing = Array.isArray(items[HISTORY_STORAGE_KEY])
+						? items[HISTORY_STORAGE_KEY]
+						: [];
+					const next = [buildHistoryEntry(entry), ...existing].slice(
+						0,
+						HISTORY_LIMIT,
+					);
+					chrome.storage.local.set({ [HISTORY_STORAGE_KEY]: next });
+				},
 			);
-			chrome.storage.local.set({ [HISTORY_STORAGE_KEY]: next });
 		},
 	);
 }
@@ -335,6 +337,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 		STORAGE_KEY,
 		ACTIVE_TAB_STORAGE_KEY,
 		OPEN_MODE_STORAGE_KEY,
+		HISTORY_ENABLED_STORAGE_KEY,
 	]);
 	const defaults = {};
 
@@ -349,6 +352,19 @@ chrome.runtime.onInstalled.addListener(async () => {
 		stored[OPEN_MODE_STORAGE_KEY] !== OPEN_MODE_SIDE_PANE
 	) {
 		defaults[OPEN_MODE_STORAGE_KEY] = resolveOpenMode(stored);
+	}
+
+	// oeHistoryEnabled used to live in storage.local; migrate any existing
+	// value into storage.sync so upgrading users keep their preference.
+	if (typeof stored[HISTORY_ENABLED_STORAGE_KEY] !== "boolean") {
+		const legacyLocal = await chrome.storage.local.get([
+			HISTORY_ENABLED_STORAGE_KEY,
+		]);
+		if (typeof legacyLocal[HISTORY_ENABLED_STORAGE_KEY] === "boolean") {
+			defaults[HISTORY_ENABLED_STORAGE_KEY] =
+				legacyLocal[HISTORY_ENABLED_STORAGE_KEY];
+		}
+		await chrome.storage.local.remove([HISTORY_ENABLED_STORAGE_KEY]);
 	}
 
 	if (Object.keys(defaults).length > 0) {

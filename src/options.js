@@ -206,7 +206,8 @@ async function loadOptions() {
     [ACTIVE_TAB_STORAGE_KEY]: DEFAULT_OPEN_IN_ACTIVE_TAB,
     [OPEN_MODE_STORAGE_KEY]: null,
     [CUSTOM_PROMPTS_STORAGE_KEY]: [],
-    [THEME_STORAGE_KEY]: DEFAULT_THEME
+    [THEME_STORAGE_KEY]: DEFAULT_THEME,
+    [HISTORY_ENABLED_STORAGE_KEY]: DEFAULT_HISTORY_ENABLED
   });
   const whitelist = Array.isArray(items[STORAGE_KEY]) ? items[STORAGE_KEY] : DEFAULT_WHITELIST;
   textarea.value = whitelist.join("\n");
@@ -215,13 +216,12 @@ async function loadOptions() {
   applyOptionsTheme(themeSelect.value);
   customPromptsContainer.textContent = "";
   normalizeCustomPrompts(items[CUSTOM_PROMPTS_STORAGE_KEY]).forEach(createCustomPromptRow);
+  recordHistoryCheckbox.checked = items[HISTORY_ENABLED_STORAGE_KEY] !== false;
 
   const localItems = await chrome.storage.local.get({
     [GROQ_API_KEY_STORAGE_KEY]: "",
-    [GROQ_VALIDATED_STORAGE_KEY]: false,
-    [HISTORY_ENABLED_STORAGE_KEY]: DEFAULT_HISTORY_ENABLED
+    [GROQ_VALIDATED_STORAGE_KEY]: false
   });
-  recordHistoryCheckbox.checked = localItems[HISTORY_ENABLED_STORAGE_KEY] !== false;
   groqApiKeyInput.value = localItems[GROQ_API_KEY_STORAGE_KEY] || "";
   const hasValidatedKey = localItems[GROQ_VALIDATED_STORAGE_KEY] === true && Boolean(groqApiKeyInput.value);
   setGroqStatus(hasValidatedKey ? "Groq API key validated." : "No validated Groq API key.", hasValidatedKey ? "success" : "");
@@ -311,7 +311,7 @@ themeSelect.addEventListener("change", () => {
 });
 
 recordHistoryCheckbox.addEventListener("change", () => {
-  chrome.storage.local.set({ [HISTORY_ENABLED_STORAGE_KEY]: recordHistoryCheckbox.checked });
+  chrome.storage.sync.set({ [HISTORY_ENABLED_STORAGE_KEY]: recordHistoryCheckbox.checked });
   setStatus(recordHistoryCheckbox.checked ? "History recording on." : "History recording off.");
 });
 
