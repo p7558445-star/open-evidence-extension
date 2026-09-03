@@ -91,19 +91,16 @@ function recordHistory(entry) {
 				return;
 			}
 
-			chrome.storage.local.get(
-				{ [HISTORY_STORAGE_KEY]: [] },
-				(items) => {
-					const existing = Array.isArray(items[HISTORY_STORAGE_KEY])
-						? items[HISTORY_STORAGE_KEY]
-						: [];
-					const next = [buildHistoryEntry(entry), ...existing].slice(
-						0,
-						HISTORY_LIMIT,
-					);
-					chrome.storage.local.set({ [HISTORY_STORAGE_KEY]: next });
-				},
-			);
+			chrome.storage.local.get({ [HISTORY_STORAGE_KEY]: [] }, (items) => {
+				const existing = Array.isArray(items[HISTORY_STORAGE_KEY])
+					? items[HISTORY_STORAGE_KEY]
+					: [];
+				const next = [buildHistoryEntry(entry), ...existing].slice(
+					0,
+					HISTORY_LIMIT,
+				);
+				chrome.storage.local.set({ [HISTORY_STORAGE_KEY]: next });
+			});
 		},
 	);
 }
@@ -399,6 +396,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 	if (message?.type === "OE_OPEN_GOOGLE") {
 		openGoogleQuery(message.query, sender.tab, sendResponse);
+		return true;
+	}
+
+	// Sent by src/nccn-redirect.js when a rewritten NCCN link is clicked. It
+	// comes from the OpenEvidence tab or from the OE iframe inside the side
+	// panel; the latter has no sender.tab, so the new tab just lands at the end
+	// of the strip. The service worker opens it because a content script has no
+	// chrome.tabs, and because a page can't navigate itself to a file:// URL.
+	if (message?.type === "OE_OPEN_URL") {
+		const url = typeof message.url === "string" ? message.url.trim() : "";
+		if (!url) {
+			sendResponse({ ok: false, error: "Empty URL" });
+			return false;
+		}
+
+		openInTab(url, sender.tab, sendResponse, true);
 		return true;
 	}
 
