@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-const GROQ_TIMEOUT_MS = 30000;
+const CLAUDE_TIMEOUT_MS = 60000;
 const PICO_INSTRUCTION = `Rewrite my recall question as an EBM foreground question. Shift "what/which" to "what's the evidence for/why." Impose PICO (population, intervention/exposure, comparator, outcome) and pick the right question type (therapy/diagnosis/prognosis). Require cited evidence, guideline comparison, and clinical implications--not just definitions.
 
 Export as JSON:
@@ -13,7 +13,7 @@ function buildPicoPrompt(selection) {
 function extractPicoQuestion(content) {
   const trimmed = typeof content === "string" ? content.trim() : "";
   if (!trimmed) {
-    throw new Error("Groq returned an empty response");
+    throw new Error("Claude returned an empty response");
   }
 
   try {
@@ -43,7 +43,7 @@ assert.match(prompt, /therapy\/diagnosis\/prognosis/);
 assert.match(prompt, /Export as JSON/);
 assert.match(prompt, /\{"question":"\$output"\}/);
 assert.match(prompt, /\+\+\+user selection\+\+\+\nhow to treat MPN/);
-assert.equal(GROQ_TIMEOUT_MS, 30000);
+assert.equal(CLAUDE_TIMEOUT_MS, 60000);
 
 assert.equal(extractPicoQuestion('{"question":"What is the evidence for aspirin in MPN?"}'), "What is the evidence for aspirin in MPN?");
 assert.equal(

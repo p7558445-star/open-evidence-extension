@@ -108,22 +108,28 @@
           <section class="settings-section">
             <h2>PICO rewrite</h2>
             <p>
-              Store a Groq API key locally to show the PICO button beside Ask
+              Store a Claude API key locally to show the PICO button beside Ask
               OpenEvidence.
             </p>
-            <label for="groq-api-key">Groq API key</label>
+            <label for="claude-model">Claude model</label>
+            <select id="claude-model">
+              <option value="claude-opus-5-5">Claude Opus 5.5 (best quality)</option>
+              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (balanced)</option>
+              <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+            </select>
+            <label for="claude-api-key">Claude API key</label>
             <div class="key-row">
               <input
-                id="groq-api-key"
+                id="claude-api-key"
                 type="password"
                 autocomplete="off"
                 spellcheck="false"
               />
-              <button type="button" id="edit-groq-key">Edit</button>
-              <button type="button" id="save-groq-key">Save</button>
-              <button type="button" id="clear-groq-key">Clear</button>
+              <button type="button" id="edit-claude-key">Edit</button>
+              <button type="button" id="save-claude-key">Save</button>
+              <button type="button" id="clear-claude-key">Clear</button>
             </div>
-            <p id="groq-status" role="status" aria-live="polite"></p>
+            <p id="claude-status" role="status" aria-live="polite"></p>
           </section>
         </section>
 
@@ -131,7 +137,7 @@
           <section class="settings-section">
             <h2>Custom prompts</h2>
             <p>
-              Create Groq-backed buttons. Use the prompt to tell the model how
+              Create Claude-backed buttons. Use the prompt to tell the model how
               to transform the selected text.
             </p>
             <div id="custom-prompts" class="custom-prompts"></div>

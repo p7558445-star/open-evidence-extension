@@ -38,14 +38,32 @@ function isWhitelisted(url, patterns) {
 const defaults = [
   "https://ankiuser.net/study",
   "https://www.openevidence.com/*",
-  "http://uptodate.com/*",
+  "uptodate.com/*",
   "nejm.org/*",
+  "https://accessmedicine.mhmedical.com/*",
+  "https://www.clinicalkey.com/*",
+  "pubmed.ncbi.nlm.nih.gov/*",
+  "pmc.ncbi.nlm.nih.gov/*",
+  "ncbi.nlm.nih.gov/*",
+  "cochranelibrary.com/*",
+  "jamanetwork.com/*",
+  "thelancet.com/*",
+  "bmj.com/*",
   "file:///*"
 ];
 
 assert.equal(isWhitelisted("https://ankiuser.net/study/deck/1", defaults), true);
 assert.equal(isWhitelisted("https://www.openevidence.com/ask?query=mpn", defaults), true);
 assert.equal(isWhitelisted("http://uptodate.com/contents/mpn", defaults), true);
+assert.equal(isWhitelisted("https://www.uptodate.com/contents/mpn", defaults), true);
+assert.equal(isWhitelisted("https://pubmed.ncbi.nlm.nih.gov/12345678/", defaults), true);
+assert.equal(isWhitelisted("https://pmc.ncbi.nlm.nih.gov/articles/PMC123/", defaults), true);
+assert.equal(isWhitelisted("https://www.ncbi.nlm.nih.gov/books/NBK1/", defaults), true);
+assert.equal(isWhitelisted("https://www.cochranelibrary.com/cdsr/doi/10.1002/example", defaults), true);
+assert.equal(isWhitelisted("https://jamanetwork.com/journals/jama/fullarticle/1", defaults), true);
+assert.equal(isWhitelisted("https://www.thelancet.com/journals/lancet/article/x", defaults), true);
+assert.equal(isWhitelisted("https://www.bmj.com/content/1/bmj.x", defaults), true);
+assert.equal(isWhitelisted("https://notbmj.com/content/1", defaults), false);
 assert.equal(isWhitelisted("https://nejm.org/doi/full/10.1056/example", defaults), true);
 assert.equal(isWhitelisted("https://www.nejm.org/doi/full/10.1056/example", defaults), true);
 assert.equal(isWhitelisted("file:///Users/htlin/Documents/example.pdf", defaults), true);
