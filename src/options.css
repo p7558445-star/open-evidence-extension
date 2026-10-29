@@ -230,16 +230,16 @@ button[type="button"]:hover {
 	min-height: 20px;
 }
 
-#groq-status {
+#claude-status {
 	min-height: 20px;
 }
 
-#groq-status[data-state="success"] {
+#claude-status[data-state="success"] {
 	color: #18763b;
 	font-weight: 700;
 }
 
-#groq-status[data-state="error"] {
+#claude-status[data-state="error"] {
 	color: #a33116;
 	font-weight: 700;
 }

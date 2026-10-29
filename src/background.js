@@ -1,10 +1,17 @@
 const DEFAULT_WHITELIST = [
 	"https://ankiuser.net/study",
 	"https://www.openevidence.com/*",
-	"http://uptodate.com/*",
+	"uptodate.com/*",
 	"nejm.org/*",
 	"https://accessmedicine.mhmedical.com/*",
 	"https://www.clinicalkey.com/*",
+	"pubmed.ncbi.nlm.nih.gov/*",
+	"pmc.ncbi.nlm.nih.gov/*",
+	"ncbi.nlm.nih.gov/*",
+	"cochranelibrary.com/*",
+	"jamanetwork.com/*",
+	"thelancet.com/*",
+	"bmj.com/*",
 	"file:///*",
 ];
 const STORAGE_KEY = "oeWhitelist";
@@ -16,10 +23,24 @@ const OPEN_MODE_TAB_ACTIVE = "tab-active";
 const OPEN_MODE_SIDE_PANE = "side-pane";
 const DEFAULT_OPEN_MODE = OPEN_MODE_TAB_BG;
 const SIDE_PANEL_URL_KEY = "oeSidePanelUrl";
-const GROQ_API_KEY_STORAGE_KEY = "oeGroqApiKey";
-const GROQ_VALIDATED_STORAGE_KEY = "oeGroqApiKeyValidated";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
-const GROQ_TIMEOUT_MS = 30000;
+const CLAUDE_API_KEY_STORAGE_KEY = "oeClaudeApiKey";
+const CLAUDE_VALIDATED_STORAGE_KEY = "oeClaudeApiKeyValidated";
+const CLAUDE_MODEL_STORAGE_KEY = "oeClaudeModel";
+const CLAUDE_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
+// Haiku has no server-side refusal fallback; the other two route a declined
+// request to another model inside the same call.
+const CLAUDE_FALLBACK_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5"];
+const CLAUDE_TIMEOUT_MS = 60000;
+// Keys from the Groq-backed versions, removed on update so a stale key does
+// not linger in storage.
+const LEGACY_GROQ_STORAGE_KEYS = ["oeGroqApiKey", "oeGroqApiKeyValidated"];
+const PICO_SCHEMA = {
+	type: "object",
+	properties: { question: { type: "string" } },
+	required: ["question"],
+	additionalProperties: false,
+};
 const ASK_CONTEXT_MENU_ID = "oe-ask-selection";
 const HISTORY_STORAGE_KEY = "oeHistory";
 const HISTORY_ENABLED_STORAGE_KEY = "oeHistoryEnabled";
@@ -247,53 +268,96 @@ function openGoogleQuery(query, sourceTab, sendResponse) {
 	);
 }
 
-async function callGroq(apiKey, messages, options = {}) {
-	const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS);
+function normalizeClaudeModel(value) {
+	return CLAUDE_MODELS.includes(value) ? value : DEFAULT_CLAUDE_MODEL;
+}
+
+async function getClaudeModel() {
+	const items = await chrome.storage.sync.get({
+		[CLAUDE_MODEL_STORAGE_KEY]: DEFAULT_CLAUDE_MODEL,
+	});
+	return normalizeClaudeModel(items[CLAUDE_MODEL_STORAGE_KEY]);
+}
+
+function buildClaudeRequest(model, prompt, options = {}) {
 	const body = {
-		model: GROQ_MODEL,
-		messages:
-			typeof messages === "string"
-				? [{ role: "user", content: messages }]
-				: messages,
-		temperature: 0.2,
+		model,
+		max_tokens: 4096,
+		messages: [{ role: "user", content: prompt }],
+		// Short rewrites: low effort keeps latency down without disabling thinking.
+		output_config: { effort: "low" },
+	};
+	const headers = {
+		"x-api-key": options.apiKey,
+		"anthropic-version": "2026-10-21",
+		// Required for requests that carry a browser/extension Origin.
+		"anthropic-dangerous-direct-browser-access": "true",
+		"content-type": "application/json",
 	};
 
-	if (options.jsonMode) {
-		body.response_format = { type: "json_object" };
+	if (options.jsonSchema) {
+		body.output_config.format = {
+			type: "json_schema",
+			schema: options.jsonSchema,
+		};
 	}
 
+	if (CLAUDE_FALLBACK_MODELS.includes(model)) {
+		body.fallbacks = "default";
+		headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+	}
+
+	return { headers, body };
+}
+
+function extractClaudeText(data) {
+	if (data?.stop_reason === "refusal") {
+		throw new Error("Claude declined this request");
+	}
+
+	const text = Array.isArray(data?.content)
+		? data.content
+				.filter((block) => block?.type === "text")
+				.map((block) => block.text)
+				.join("")
+				.trim()
+		: "";
+	if (!text) {
+		throw new Error("Claude returned an empty response");
+	}
+
+	return text;
+}
+
+async function callClaude(apiKey, prompt, options = {}) {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), CLAUDE_TIMEOUT_MS);
+	const model = options.model || (await getClaudeModel());
+	const { headers, body } = buildClaudeRequest(model, prompt, {
+		apiKey,
+		jsonSchema: options.jsonSchema,
+	});
+
 	try {
-		const response = await fetch(
-			"https://api.groq.com/openai/v1/chat/completions",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(body),
-				signal: controller.signal,
-			},
-		);
+		const response = await fetch("https://api.anthropic.com/v1/messages", {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
 
 		const data = await response.json().catch(() => ({}));
 		if (!response.ok) {
 			const message =
 				data?.error?.message ||
-				`Groq request failed with HTTP ${response.status}`;
+				`Claude request failed with HTTP ${response.status}`;
 			throw new Error(message);
 		}
 
-		const content = data?.choices?.[0]?.message?.content?.trim();
-		if (!content) {
-			throw new Error("Groq returned an empty response");
-		}
-
-		return content;
+		return extractClaudeText(data);
 	} catch (error) {
 		if (error.name === "AbortError") {
-			throw new Error("Groq request timed out");
+			throw new Error("Claude request timed out");
 		}
 
 		throw error;
@@ -305,7 +369,7 @@ async function callGroq(apiKey, messages, options = {}) {
 function extractPicoQuestion(content) {
 	const trimmed = typeof content === "string" ? content.trim() : "";
 	if (!trimmed) {
-		throw new Error("Groq returned an empty response");
+		throw new Error("Claude returned an empty response");
 	}
 
 	try {
@@ -368,6 +432,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 		await chrome.storage.sync.set(defaults);
 	}
 
+	await chrome.storage.local.remove(LEGACY_GROQ_STORAGE_KEYS);
+
 	loadOpenMode();
 
 	await chrome.contextMenus.removeAll();
@@ -415,7 +481,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		return true;
 	}
 
-	if (message?.type === "OE_VALIDATE_GROQ_KEY") {
+	if (message?.type === "OE_VALIDATE_CLAUDE_KEY") {
 		const apiKey =
 			typeof message.apiKey === "string" ? message.apiKey.trim() : "";
 		if (!apiKey) {
@@ -423,25 +489,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 			return false;
 		}
 
-		callGroq(apiKey, "Reply with exactly: ok")
+		callClaude(apiKey, "Reply with exactly: ok", {
+			model: normalizeClaudeModel(message.model),
+		})
 			.then(async () => {
 				await chrome.storage.local.set({
-					[GROQ_API_KEY_STORAGE_KEY]: apiKey,
-					[GROQ_VALIDATED_STORAGE_KEY]: true,
+					[CLAUDE_API_KEY_STORAGE_KEY]: apiKey,
+					[CLAUDE_VALIDATED_STORAGE_KEY]: true,
 				});
 				sendResponse({ ok: true });
 			})
 			.catch(async (error) => {
-				await chrome.storage.local.set({ [GROQ_VALIDATED_STORAGE_KEY]: false });
+				await chrome.storage.local.set({ [CLAUDE_VALIDATED_STORAGE_KEY]: false });
 				sendResponse({ ok: false, error: error.message });
 			});
 
 		return true;
 	}
 
-	if (message?.type === "OE_CLEAR_GROQ_KEY") {
+	if (message?.type === "OE_CLEAR_CLAUDE_KEY") {
 		chrome.storage.local
-			.remove([GROQ_API_KEY_STORAGE_KEY, GROQ_VALIDATED_STORAGE_KEY])
+			.remove([CLAUDE_API_KEY_STORAGE_KEY, CLAUDE_VALIDATED_STORAGE_KEY])
 			.then(() => sendResponse({ ok: true }))
 			.catch((error) => sendResponse({ ok: false, error: error.message }));
 
@@ -458,23 +526,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 		chrome.storage.local.get(
 			{
-				[GROQ_API_KEY_STORAGE_KEY]: "",
-				[GROQ_VALIDATED_STORAGE_KEY]: false,
+				[CLAUDE_API_KEY_STORAGE_KEY]: "",
+				[CLAUDE_VALIDATED_STORAGE_KEY]: false,
 			},
 			(items) => {
-				const apiKey = items[GROQ_API_KEY_STORAGE_KEY];
-				const validated = items[GROQ_VALIDATED_STORAGE_KEY] === true;
+				const apiKey = items[CLAUDE_API_KEY_STORAGE_KEY];
+				const validated = items[CLAUDE_VALIDATED_STORAGE_KEY] === true;
 
 				if (!apiKey || !validated) {
 					sendResponse({
 						ok: false,
-						error: "Validate a Groq API key in extension options first",
+						error: "Validate a Claude API key in extension options first",
 					});
 					return;
 				}
 
 				const prompt = `${PICO_INSTRUCTION}\n\n+++user selection+++\n${selection}`;
-				callGroq(apiKey, prompt, { jsonMode: true })
+				callClaude(apiKey, prompt, { jsonSchema: PICO_SCHEMA })
 					.then((content) =>
 						sendResponse({
 							ok: true,
@@ -501,23 +569,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 		chrome.storage.local.get(
 			{
-				[GROQ_API_KEY_STORAGE_KEY]: "",
-				[GROQ_VALIDATED_STORAGE_KEY]: false,
+				[CLAUDE_API_KEY_STORAGE_KEY]: "",
+				[CLAUDE_VALIDATED_STORAGE_KEY]: false,
 			},
 			(items) => {
-				const apiKey = items[GROQ_API_KEY_STORAGE_KEY];
-				const validated = items[GROQ_VALIDATED_STORAGE_KEY] === true;
+				const apiKey = items[CLAUDE_API_KEY_STORAGE_KEY];
+				const validated = items[CLAUDE_VALIDATED_STORAGE_KEY] === true;
 
 				if (!apiKey || !validated) {
 					sendResponse({
 						ok: false,
-						error: "Validate a Groq API key in extension options first",
+						error: "Validate a Claude API key in extension options first",
 					});
 					return;
 				}
 
 				const fullPrompt = `${selection}\n\n${prompt}`;
-				callGroq(apiKey, fullPrompt)
+				callClaude(apiKey, fullPrompt)
 					.then((content) =>
 						sendResponse({ ok: true, content: content.trim(), prompt }),
 					)

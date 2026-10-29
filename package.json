@@ -6,14 +6,14 @@
 	"type": "module",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/htlin222/oe-extension.git"
+		"url": "https://github.com/p7558445-star/open-evidence-extension.git"
 	},
 	"keywords": [
 		"chrome-extension",
 		"openevidence",
 		"evidence-based-medicine",
 		"pico",
-		"groq"
+		"claude"
 	],
 	"scripts": {
 		"build": "node scripts/build-extension.mjs",

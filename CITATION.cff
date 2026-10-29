@@ -16,7 +16,7 @@ keywords:
   - openevidence
   - evidence-based-medicine
   - pico
-  - groq
+  - claude
 abstract: >-
   A Chrome extension that opens selected clinical text in OpenEvidence and
   optionally rewrites selections into editable evidence-focused questions.

@@ -5,8 +5,11 @@ const OPEN_MODES = ["tab-bg", "tab-active", "side-pane"];
 const DEFAULT_OPEN_MODE = "tab-bg";
 const CUSTOM_PROMPTS_STORAGE_KEY = "oeCustomPrompts";
 const THEME_STORAGE_KEY = "oeTheme";
-const GROQ_API_KEY_STORAGE_KEY = "oeGroqApiKey";
-const GROQ_VALIDATED_STORAGE_KEY = "oeGroqApiKeyValidated";
+const CLAUDE_API_KEY_STORAGE_KEY = "oeClaudeApiKey";
+const CLAUDE_VALIDATED_STORAGE_KEY = "oeClaudeApiKeyValidated";
+const CLAUDE_MODEL_STORAGE_KEY = "oeClaudeModel";
+const CLAUDE_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
 const HISTORY_STORAGE_KEY = "oeHistory";
 const HISTORY_ENABLED_STORAGE_KEY = "oeHistoryEnabled";
 const DEFAULT_HISTORY_ENABLED = true;
@@ -18,10 +21,17 @@ const DEFAULT_NCCN_TEMPLATE =
 const DEFAULT_WHITELIST = [
 	"https://ankiuser.net/study",
 	"https://www.openevidence.com/*",
-	"http://uptodate.com/*",
+	"uptodate.com/*",
 	"nejm.org/*",
 	"https://accessmedicine.mhmedical.com/*",
 	"https://www.clinicalkey.com/*",
+	"pubmed.ncbi.nlm.nih.gov/*",
+	"pmc.ncbi.nlm.nih.gov/*",
+	"ncbi.nlm.nih.gov/*",
+	"cochranelibrary.com/*",
+	"jamanetwork.com/*",
+	"thelancet.com/*",
+	"bmj.com/*",
 	"file:///*",
 ];
 const DEFAULT_OPEN_IN_ACTIVE_TAB = false;
@@ -31,13 +41,14 @@ const form = document.querySelector("#options-form");
 const textarea = document.querySelector("#whitelist");
 const openModeSelect = document.querySelector("#open-mode");
 const themeSelect = document.querySelector("#theme");
-const groqApiKeyInput = document.querySelector("#groq-api-key");
-const editGroqKeyButton = document.querySelector("#edit-groq-key");
-const saveGroqKeyButton = document.querySelector("#save-groq-key");
-const clearGroqKeyButton = document.querySelector("#clear-groq-key");
+const claudeModelSelect = document.querySelector("#claude-model");
+const claudeApiKeyInput = document.querySelector("#claude-api-key");
+const editClaudeKeyButton = document.querySelector("#edit-claude-key");
+const saveClaudeKeyButton = document.querySelector("#save-claude-key");
+const clearClaudeKeyButton = document.querySelector("#clear-claude-key");
 const customPromptsContainer = document.querySelector("#custom-prompts");
 const addCustomPromptButton = document.querySelector("#add-custom-prompt");
-const groqStatus = document.querySelector("#groq-status");
+const claudeStatus = document.querySelector("#claude-status");
 const resetButton = document.querySelector("#reset");
 const status = document.querySelector("#status");
 const recordHistoryCheckbox = document.querySelector("#record-history");
@@ -112,20 +123,24 @@ function setStatus(message) {
 	}, 2500);
 }
 
-function setGroqStatus(message, state = "") {
-	groqStatus.textContent = message;
-	groqStatus.dataset.state = state;
+function setClaudeStatus(message, state = "") {
+	claudeStatus.textContent = message;
+	claudeStatus.dataset.state = state;
 }
 
-function setGroqKeyEditing(isEditing) {
-	groqApiKeyInput.readOnly = !isEditing;
-	saveGroqKeyButton.disabled = !isEditing;
-	editGroqKeyButton.disabled = isEditing;
+function setClaudeKeyEditing(isEditing) {
+	claudeApiKeyInput.readOnly = !isEditing;
+	saveClaudeKeyButton.disabled = !isEditing;
+	editClaudeKeyButton.disabled = isEditing;
 
 	if (isEditing) {
-		groqApiKeyInput.focus();
-		groqApiKeyInput.select();
+		claudeApiKeyInput.focus();
+		claudeApiKeyInput.select();
 	}
+}
+
+function normalizeClaudeModel(value) {
+	return CLAUDE_MODELS.includes(value) ? value : DEFAULT_CLAUDE_MODEL;
 }
 
 function normalizeTheme(value) {
@@ -230,6 +245,7 @@ async function loadOptions() {
 		[OPEN_MODE_STORAGE_KEY]: null,
 		[CUSTOM_PROMPTS_STORAGE_KEY]: [],
 		[THEME_STORAGE_KEY]: DEFAULT_THEME,
+		[CLAUDE_MODEL_STORAGE_KEY]: DEFAULT_CLAUDE_MODEL,
 		[HISTORY_ENABLED_STORAGE_KEY]: DEFAULT_HISTORY_ENABLED,
 		[NCCN_ENABLED_STORAGE_KEY]: DEFAULT_NCCN_ENABLED,
 		[NCCN_TEMPLATE_STORAGE_KEY]: DEFAULT_NCCN_TEMPLATE,
@@ -240,6 +256,7 @@ async function loadOptions() {
 	textarea.value = whitelist.join("\n");
 	openModeSelect.value = resolveOpenMode(items);
 	themeSelect.value = normalizeTheme(items[THEME_STORAGE_KEY]);
+	claudeModelSelect.value = normalizeClaudeModel(items[CLAUDE_MODEL_STORAGE_KEY]);
 	applyOptionsTheme(themeSelect.value);
 	customPromptsContainer.textContent = "";
 	normalizeCustomPrompts(items[CUSTOM_PROMPTS_STORAGE_KEY]).forEach(
@@ -252,18 +269,18 @@ async function loadOptions() {
 	);
 
 	const localItems = await chrome.storage.local.get({
-		[GROQ_API_KEY_STORAGE_KEY]: "",
-		[GROQ_VALIDATED_STORAGE_KEY]: false,
+		[CLAUDE_API_KEY_STORAGE_KEY]: "",
+		[CLAUDE_VALIDATED_STORAGE_KEY]: false,
 	});
-	groqApiKeyInput.value = localItems[GROQ_API_KEY_STORAGE_KEY] || "";
+	claudeApiKeyInput.value = localItems[CLAUDE_API_KEY_STORAGE_KEY] || "";
 	const hasValidatedKey =
-		localItems[GROQ_VALIDATED_STORAGE_KEY] === true &&
-		Boolean(groqApiKeyInput.value);
-	setGroqStatus(
-		hasValidatedKey ? "Groq API key validated." : "No validated Groq API key.",
+		localItems[CLAUDE_VALIDATED_STORAGE_KEY] === true &&
+		Boolean(claudeApiKeyInput.value);
+	setClaudeStatus(
+		hasValidatedKey ? "Claude API key validated." : "No validated Claude API key.",
 		hasValidatedKey ? "success" : "",
 	);
-	setGroqKeyEditing(!groqApiKeyInput.value);
+	setClaudeKeyEditing(!claudeApiKeyInput.value);
 }
 
 form.addEventListener("submit", async (event) => {
@@ -282,6 +299,7 @@ form.addEventListener("submit", async (event) => {
 		[ACTIVE_TAB_STORAGE_KEY]: openMode === "tab-active",
 		[CUSTOM_PROMPTS_STORAGE_KEY]: customPrompts,
 		[THEME_STORAGE_KEY]: normalizeTheme(themeSelect.value),
+		[CLAUDE_MODEL_STORAGE_KEY]: normalizeClaudeModel(claudeModelSelect.value),
 		[NCCN_ENABLED_STORAGE_KEY]: nccnEnabledCheckbox.checked,
 		[NCCN_TEMPLATE_STORAGE_KEY]: normalizeNccnTemplate(nccnTemplateInput.value),
 	});
@@ -299,6 +317,7 @@ resetButton.addEventListener("click", async () => {
 		[ACTIVE_TAB_STORAGE_KEY]: DEFAULT_OPEN_IN_ACTIVE_TAB,
 		[CUSTOM_PROMPTS_STORAGE_KEY]: [],
 		[THEME_STORAGE_KEY]: DEFAULT_THEME,
+		[CLAUDE_MODEL_STORAGE_KEY]: DEFAULT_CLAUDE_MODEL,
 		[NCCN_ENABLED_STORAGE_KEY]: DEFAULT_NCCN_ENABLED,
 		[NCCN_TEMPLATE_STORAGE_KEY]: DEFAULT_NCCN_TEMPLATE,
 	});
@@ -307,6 +326,7 @@ resetButton.addEventListener("click", async () => {
 	nccnTemplateInput.value = DEFAULT_NCCN_TEMPLATE;
 	openModeSelect.value = DEFAULT_OPEN_MODE;
 	themeSelect.value = DEFAULT_THEME;
+	claudeModelSelect.value = DEFAULT_CLAUDE_MODEL;
 	applyOptionsTheme(DEFAULT_THEME);
 	customPromptsContainer.textContent = "";
 	setStatus("Reset.");
@@ -323,48 +343,58 @@ addCustomPromptButton.addEventListener("click", () => {
 	createCustomPromptRow();
 });
 
-editGroqKeyButton.addEventListener("click", () => {
-	setGroqKeyEditing(true);
+editClaudeKeyButton.addEventListener("click", () => {
+	setClaudeKeyEditing(true);
 });
 
-saveGroqKeyButton.addEventListener("click", () => {
-	const apiKey = groqApiKeyInput.value.trim();
-	setGroqStatus("Validating Groq API key...");
-	saveGroqKeyButton.disabled = true;
+saveClaudeKeyButton.addEventListener("click", () => {
+	const apiKey = claudeApiKeyInput.value.trim();
+	setClaudeStatus("Validating Claude API key...");
+	saveClaudeKeyButton.disabled = true;
 
 	chrome.runtime.sendMessage(
-		{ type: "OE_VALIDATE_GROQ_KEY", apiKey },
+		{
+			type: "OE_VALIDATE_CLAUDE_KEY",
+			apiKey,
+			model: normalizeClaudeModel(claudeModelSelect.value),
+		},
 		(response) => {
 			if (!response?.ok) {
-				saveGroqKeyButton.disabled = false;
-				setGroqStatus(
-					response?.error || "Groq API key validation failed.",
+				saveClaudeKeyButton.disabled = false;
+				setClaudeStatus(
+					response?.error || "Claude API key validation failed.",
 					"error",
 				);
 				return;
 			}
 
-			setGroqStatus("Groq API key validated and saved locally.", "success");
-			setGroqKeyEditing(false);
+			setClaudeStatus("Claude API key validated and saved locally.", "success");
+			setClaudeKeyEditing(false);
 		},
 	);
 });
 
-clearGroqKeyButton.addEventListener("click", () => {
-	chrome.runtime.sendMessage({ type: "OE_CLEAR_GROQ_KEY" }, (response) => {
+clearClaudeKeyButton.addEventListener("click", () => {
+	chrome.runtime.sendMessage({ type: "OE_CLEAR_CLAUDE_KEY" }, (response) => {
 		if (!response?.ok) {
-			setGroqStatus(response?.error || "Unable to clear Groq API key.");
+			setClaudeStatus(response?.error || "Unable to clear Claude API key.");
 			return;
 		}
 
-		groqApiKeyInput.value = "";
-		setGroqStatus("Groq API key cleared.");
-		setGroqKeyEditing(true);
+		claudeApiKeyInput.value = "";
+		setClaudeStatus("Claude API key cleared.");
+		setClaudeKeyEditing(true);
 	});
 });
 
 themeSelect.addEventListener("change", () => {
 	applyOptionsTheme(themeSelect.value);
+});
+
+claudeModelSelect.addEventListener("change", () => {
+	chrome.storage.sync.set({
+		[CLAUDE_MODEL_STORAGE_KEY]: normalizeClaudeModel(claudeModelSelect.value),
+	});
 });
 
 recordHistoryCheckbox.addEventListener("change", () => {
@@ -535,9 +565,9 @@ window
 
 loadOptions();
 
-setButtonIcon(editGroqKeyButton, "edit");
-setButtonIcon(saveGroqKeyButton, "save");
-setButtonIcon(clearGroqKeyButton, "trash");
+setButtonIcon(editClaudeKeyButton, "edit");
+setButtonIcon(saveClaudeKeyButton, "save");
+setButtonIcon(clearClaudeKeyButton, "trash");
 setButtonIcon(addCustomPromptButton, "plus");
 setButtonIcon(form.querySelector('button[type="submit"]'), "save");
 setButtonIcon(resetButton, "x");

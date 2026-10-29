@@ -1,14 +1,21 @@
 const STORAGE_KEY = "oeWhitelist";
 const CUSTOM_PROMPTS_STORAGE_KEY = "oeCustomPrompts";
 const THEME_STORAGE_KEY = "oeTheme";
-const GROQ_VALIDATED_STORAGE_KEY = "oeGroqApiKeyValidated";
+const CLAUDE_VALIDATED_STORAGE_KEY = "oeClaudeApiKeyValidated";
 const DEFAULT_WHITELIST = [
   "https://ankiuser.net/study",
   "https://www.openevidence.com/*",
-  "http://uptodate.com/*",
+  "uptodate.com/*",
   "nejm.org/*",
   "https://accessmedicine.mhmedical.com/*",
   "https://www.clinicalkey.com/*",
+  "pubmed.ncbi.nlm.nih.gov/*",
+  "pmc.ncbi.nlm.nih.gov/*",
+  "ncbi.nlm.nih.gov/*",
+  "cochranelibrary.com/*",
+  "jamanetwork.com/*",
+  "thelancet.com/*",
+  "bmj.com/*",
   "file:///*"
 ];
 const BUTTON_WIDTH = 154;
@@ -23,7 +30,7 @@ const VIEWPORT_MARGIN = 10;
 const DEFAULT_THEME = "system";
 
 let whitelist = DEFAULT_WHITELIST;
-let groqKeyValidated = false;
+let claudeKeyValidated = false;
 let customPrompts = [];
 let theme = DEFAULT_THEME;
 let toolbar = null;
@@ -88,9 +95,9 @@ function loadWhitelist() {
   );
 }
 
-function loadGroqStatus() {
-  chrome.storage.local.get({ [GROQ_VALIDATED_STORAGE_KEY]: false }, (items) => {
-    groqKeyValidated = items[GROQ_VALIDATED_STORAGE_KEY] === true;
+function loadClaudeStatus() {
+  chrome.storage.local.get({ [CLAUDE_VALIDATED_STORAGE_KEY]: false }, (items) => {
+    claudeKeyValidated = items[CLAUDE_VALIDATED_STORAGE_KEY] === true;
   });
 }
 
@@ -178,7 +185,7 @@ function getButtonPosition() {
     return null;
   }
 
-  const customButtonCount = groqKeyValidated ? customPrompts.length : 0;
+  const customButtonCount = claudeKeyValidated ? customPrompts.length : 0;
   const toolbarWidth =
     Math.min(
       window.innerWidth - VIEWPORT_MARGIN * 2,
@@ -187,7 +194,7 @@ function getButtonPosition() {
         UPTODATE_BUTTON_WIDTH +
         BUTTON_GAP +
         GOOGLE_BUTTON_WIDTH +
-        (groqKeyValidated ? BUTTON_GAP + PICO_BUTTON_WIDTH : 0) +
+        (claudeKeyValidated ? BUTTON_GAP + PICO_BUTTON_WIDTH : 0) +
         customButtonCount * (BUTTON_GAP + CUSTOM_BUTTON_WIDTH) +
         BUTTON_GAP +
         CLOSE_BUTTON_WIDTH
@@ -454,7 +461,7 @@ function ensureToolbar() {
 
   toolbar.appendChild(googleButton);
 
-  if (groqKeyValidated) {
+  if (claudeKeyValidated) {
     const picoButton = makeToolbarButton(
       "oe-selection-button oe-selection-button--pico",
       "PICO",
@@ -860,14 +867,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
-  if (areaName === "local" && changes[GROQ_VALIDATED_STORAGE_KEY]) {
-    groqKeyValidated = changes[GROQ_VALIDATED_STORAGE_KEY].newValue === true;
+  if (areaName === "local" && changes[CLAUDE_VALIDATED_STORAGE_KEY]) {
+    claudeKeyValidated = changes[CLAUDE_VALIDATED_STORAGE_KEY].newValue === true;
     removeButtonImmediately();
   }
 });
 
 loadWhitelist();
-loadGroqStatus();
+loadClaudeStatus();
 
 colorSchemeQuery?.addEventListener("change", () => {
   if (theme === "system") {
